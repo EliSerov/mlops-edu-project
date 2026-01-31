@@ -1,0 +1,55 @@
+stages:
+  prepare:
+    cmd: python -m scoring.data.prepare data/raw/UCI_Credit_Card.csv data/processed
+    deps:
+      - data/raw/UCI_Credit_Card.csv
+      - scoring/data/prepare.py
+      - scoring/data/schema.py
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+
+  train:
+    cmd: python -m scoring.model.train --train data/processed/train.csv --test data/processed/test.csv --output models/pytorch --epochs 50
+    deps:
+      - data/processed/train.csv
+      - data/processed/test.csv
+      - scoring/model/train.py
+      - scoring/model/network.py
+    outs:
+      - models/pytorch/model.pt
+      - models/pytorch/scaler.pkl
+      - models/pytorch/meta.json
+    metrics:
+      - models/pytorch/metrics.json:
+          cache: false
+
+  export_onnx:
+    cmd: python -m scoring.model.onnx_export --model-dir models/pytorch --output models/onnx/model.onnx --test-data data/processed/test.csv --validate
+    deps:
+      - models/pytorch/model.pt
+      - models/pytorch/meta.json
+      - scoring/model/onnx_export.py
+    outs:
+      - models/onnx/model.onnx
+
+  quantize:
+    cmd: python -m scoring.model.quantize --input models/onnx/model.onnx --output models/onnx/model_int8.onnx --compare --test-data data/processed/test.csv --scaler models/pytorch/scaler.pkl
+    deps:
+      - models/onnx/model.onnx
+      - models/pytorch/scaler.pkl
+      - scoring/model/quantize.py
+    outs:
+      - models/onnx/model_int8.onnx
+
+  benchmark:
+    cmd: python -m scoring.model.benchmark --pytorch-dir models/pytorch --onnx models/onnx/model.onnx --onnx-quant models/onnx/model_int8.onnx --test-data data/processed/test.csv --scaler models/pytorch/scaler.pkl --output reports/benchmark.csv
+    deps:
+      - models/pytorch/
+      - models/onnx/model.onnx
+      - models/onnx/model_int8.onnx
+      - scoring/model/benchmark.py
+    plots:
+      - reports/benchmark.csv:
+          x: batch_size
+          y: throughput_rps

@@ -1,0 +1,31 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# don't include raw data in image
+data/raw
+
+# docs and tests not needed in prod image
+docs/
+tests/
+notebooks/
+
+# infra
+infra/
+deploy/
+ops/
+
+# reports
+reports/
+*.html
+
+# dev stuff
+.env*
+*.md
+!README.md

@@ -1,0 +1,38 @@
+# Loki stack helm values
+# helm install loki grafana/loki-stack -f loki-values.yaml
+
+loki:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+  config:
+    limits_config:
+      retention_period: 168h  # 7 дней
+
+promtail:
+  enabled: true
+  config:
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        pipeline_stages:
+          - docker: {}
+          - match:
+              selector: '{app="backend"}'
+              stages:
+                - json:
+                    expressions:
+                      level: level
+                      message: message
+                - labels:
+                    level:
+
+grafana:
+  enabled: false  # используем из prometheus стека
+
+fluent-bit:
+  enabled: false

@@ -1,0 +1,8 @@
+{
+  "name": "credit-scoring-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'No build step, static HTML'"
+  }
+}

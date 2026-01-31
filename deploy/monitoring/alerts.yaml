@@ -1,0 +1,50 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: credit-scoring-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: credit-scoring
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(prediction_requests_total{status="error"}[5m])) 
+            / sum(rate(prediction_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Высокий процент ошибок в credit scoring API
+            description: "Процент ошибок {{ $value | humanizePercentage }} за последние 5 минут"
+
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m])) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Высокая латенси предсказаний
+            description: "P95 латенси {{ $value | humanizeDuration }}"
+
+        - alert: PodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace=~"credit-scoring.*"}[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Под {{ $labels.pod }} перезапускается в цикле
+
+        - alert: HighMemoryUsage
+          expr: |
+            container_memory_working_set_bytes{namespace=~"credit-scoring.*"} 
+            / container_spec_memory_limit_bytes > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Контейнер {{ $labels.container }} использует память > 90%

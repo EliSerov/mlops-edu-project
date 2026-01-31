@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drift-monitor
+  namespace: credit-scoring
+spec:
+  schedule: "0 6 * * *"  # ежедневно в 6 утра
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: drift-check
+              image: credit-scoring/backend:latest
+              command:
+                - python
+                - -m
+                - ops.drift.monitor
+                - --reference
+                - /data/train.csv
+                - --current
+                - /data/production_last_24h.csv
+                - --output
+                - /reports/drift
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                - name: reports
+                  mountPath: /reports
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: ml-data
+            - name: reports
+              persistentVolumeClaim:
+                claimName: drift-reports
+          restartPolicy: OnFailure

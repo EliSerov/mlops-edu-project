@@ -1,0 +1,47 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# ml artifacts
+*.pt
+*.onnx
+*.pkl
+mlruns/
+models/
+
+# data (managed by dvc)
+data/processed/
+data/raw/*.csv
+!data/raw/.gitkeep
+
+*.html
+
+# ide
+.idea/
+.vscode/
+*.swp
+
+# os
+.DS_Store
+Thumbs.db
+
+# env
+.env
+.env.*
+*.local
+
+# terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+
+# k8s
+kubeconfig

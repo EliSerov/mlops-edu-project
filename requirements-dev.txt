@@ -1,0 +1,7 @@
+-r requirements.txt
+
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.12.0
+ruff>=0.1.9
+locust>=2.20.0

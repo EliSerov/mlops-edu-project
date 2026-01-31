@@ -1,0 +1,14 @@
+# DVC параметры
+prepare:
+  test_size: 0.2
+  random_state: 42
+
+train:
+  epochs: 50
+  batch_size: 256
+  lr: 0.001
+  hidden_dims: [64, 32]
+  dropout: 0.3
+
+model:
+  threshold: 0.5

@@ -1,0 +1,112 @@
+# Prometheus helm values
+# helm install prometheus prometheus-community/kube-prometheus-stack -f prometheus-values.yaml
+
+alertmanager:
+  enabled: true
+  config:
+    route:
+      receiver: slack
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      - name: slack
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook
+            channel: '#alerts'
+            send_resolved: true
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+    serviceMonitorSelector:
+      matchLabels:
+        release: prometheus
+    additionalScrapeConfigs:
+      - job_name: credit-scoring-backend
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - credit-scoring
+                - credit-scoring-staging
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+grafana:
+  enabled: true
+  adminPassword: changeme  # переопределить через secret
+  persistence:
+    enabled: true
+    size: 5Gi
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: ''
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      credit-scoring:
+        json: |
+          {
+            "title": "Credit Scoring API",
+            "uid": "credit-scoring",
+            "panels": [
+              {
+                "title": "Частота запросов",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "sum(rate(prediction_requests_total[5m])) by (status)",
+                    "legendFormat": "{{status}}"
+                  }
+                ]
+              },
+              {
+                "title": "Латенси P95",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m]))",
+                    "legendFormat": "p95"
+                  }
+                ]
+              },
+              {
+                "title": "Распределение предсказаний",
+                "type": "heatmap",
+                "targets": [
+                  {
+                    "expr": "sum(rate(prediction_probability_bucket[5m])) by (le)"
+                  }
+                ]
+              }
+            ]
+          }
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
