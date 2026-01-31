@@ -2,6 +2,7 @@
 Нагрузочное тестирование с Locust.
 Запуск: locust -f tests/locustfile.py --host http://localhost:8000
 """
+
 import random
 
 from locust import HttpUser, between, task
@@ -9,11 +10,11 @@ from locust import HttpUser, between, task
 
 class ScoringUser(HttpUser):
     wait_time = between(0.1, 0.5)
-    
+
     def on_start(self):
         # прогрев
         self.client.get("/health")
-    
+
     @task(10)
     def predict(self):
         # рандомизируем входные данные
@@ -43,11 +44,11 @@ class ScoringUser(HttpUser):
             "PAY_AMT6": random.randint(0, 50000),
         }
         self.client.post("/predict", json=payload)
-    
+
     @task(1)
     def health(self):
         self.client.get("/health")
-    
+
     @task(1)
     def metrics(self):
         self.client.get("/metrics")

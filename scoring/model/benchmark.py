@@ -1,6 +1,7 @@
 """
 Бенчмарк производительности инференса для разных форматов моделей и устройств.
 """
+
 import json
 import pickle
 import time
@@ -36,36 +37,36 @@ def benchmark_onnx(
     device: str = "cpu",
 ) -> BenchmarkResult:
     """Бенчмарк инференса ONNX модели."""
-    
+
     providers = ["CPUExecutionProvider"]
     if device == "gpu" and "CUDAExecutionProvider" in ort.get_available_providers():
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-    
+
     session = ort.InferenceSession(str(model_path), providers=providers)
     actual_device = session.get_providers()[0].replace("ExecutionProvider", "").lower()
-    
+
     # готовим батчированный вход
     n_samples = len(input_data)
-    
+
     # прогрев
     for _ in range(warmup):
         idx = np.random.choice(n_samples, batch_size, replace=True)
         batch = input_data[idx]
         session.run(None, {"features": batch})
-    
+
     # бенчмарк
     latencies = []
     for _ in range(runs):
         idx = np.random.choice(n_samples, batch_size, replace=True)
         batch = input_data[idx]
-        
+
         start = time.perf_counter()
         session.run(None, {"features": batch})
         elapsed = (time.perf_counter() - start) * 1000  # ms
         latencies.append(elapsed)
-    
+
     latencies = np.array(latencies)
-    
+
     return BenchmarkResult(
         name=Path(model_path).stem,
         device=actual_device,
@@ -90,12 +91,12 @@ def benchmark_pytorch(
 ) -> BenchmarkResult:
     """Бенчмарк инференса PyTorch модели."""
     from .network import create_model
-    
+
     model_dir = Path(model_dir)
-    
+
     with open(model_dir / "meta.json") as f:
         meta = json.load(f)
-    
+
     # поддержка разных устройств
     if device == "cpu":
         torch_device = torch.device("cpu")
@@ -103,15 +104,15 @@ def benchmark_pytorch(
         torch_device = torch.device("mps")  # Apple GPU
     else:
         torch_device = torch.device("cuda")
-    
+
     model = create_model(meta["input_dim"], meta.get("config"))
     model.load_state_dict(torch.load(model_dir / "model.pt", weights_only=True))
     model.to(torch_device)
     model.eval()
-    
+
     input_tensor = torch.FloatTensor(input_data).to(torch_device)
     n_samples = len(input_data)
-    
+
     # прогрев
     with torch.no_grad():
         for _ in range(warmup):
@@ -123,14 +124,14 @@ def benchmark_pytorch(
                 torch.mps.synchronize()
             elif device == "cuda":
                 torch.cuda.synchronize()
-    
+
     # бенчмарк
     latencies = []
     with torch.no_grad():
         for _ in range(runs):
             idx = torch.randint(0, n_samples, (batch_size,))
             batch = input_tensor[idx]
-            
+
             start = time.perf_counter()
             model(batch)
             # синхронизация для точного замера
@@ -140,9 +141,9 @@ def benchmark_pytorch(
                 torch.cuda.synchronize()
             elapsed = (time.perf_counter() - start) * 1000
             latencies.append(elapsed)
-    
+
     latencies = np.array(latencies)
-    
+
     return BenchmarkResult(
         name="pytorch",
         device=device,
@@ -165,34 +166,31 @@ def benchmark_onnx_coreml(
     runs: int = 100,
 ) -> BenchmarkResult:
     """Бенчмарк ONNX с CoreML провайдером (Apple Neural Engine / ANE)."""
-    
+
     # CoreML может использовать CPU, GPU или Neural Engine автоматически
-    session = ort.InferenceSession(
-        str(model_path), 
-        providers=["CoreMLExecutionProvider"]
-    )
-    
+    session = ort.InferenceSession(str(model_path), providers=["CoreMLExecutionProvider"])
+
     n_samples = len(input_data)
-    
+
     # прогрев
     for _ in range(warmup):
         idx = np.random.choice(n_samples, batch_size, replace=True)
         batch = input_data[idx]
         session.run(None, {"features": batch})
-    
+
     # бенчмарк
     latencies = []
     for _ in range(runs):
         idx = np.random.choice(n_samples, batch_size, replace=True)
         batch = input_data[idx]
-        
+
         start = time.perf_counter()
         session.run(None, {"features": batch})
         elapsed = (time.perf_counter() - start) * 1000
         latencies.append(elapsed)
-    
+
     latencies = np.array(latencies)
-    
+
     return BenchmarkResult(
         name="onnx_coreml",
         device="ane",  # Apple Neural Engine
@@ -216,42 +214,42 @@ def run_benchmark_suite(
     batch_sizes: list[int] = None,
 ) -> pd.DataFrame:
     """Запуск полного набора бенчмарков, возвращает результаты в DataFrame."""
-    
+
     TARGET = "default.payment.next.month"
     batch_sizes = batch_sizes or [1, 16, 64, 256]
-    
+
     with open(scaler_path, "rb") as f:
         scaler = pickle.load(f)
-    
+
     test_df = pd.read_csv(test_data_path)
     X = test_df.drop(columns=[TARGET]).values
     X_scaled = scaler.transform(X).astype(np.float32)
-    
+
     # проверяем наличие квантизованной модели
     has_quant = onnx_quant_path and Path(onnx_quant_path).exists()
     if not has_quant:
         print("INT8 модель не найдена, пропускаем бенчмарк квантизации")
-    
+
     # проверяем CoreML (Apple Silicon NPU)
     has_coreml = "CoreMLExecutionProvider" in ort.get_available_providers()
     if has_coreml:
         print("CoreML доступен (Apple Neural Engine)")
-    
+
     results = []
-    
+
     for bs in batch_sizes:
         print(f"\nBatch size: {bs}")
-        
+
         # PyTorch CPU
         r = benchmark_pytorch(pytorch_dir, X_scaled, batch_size=bs, device="cpu")
         results.append(r)
         print(f"  PyTorch CPU: {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
-        
+
         # ONNX CPU
         r = benchmark_onnx(onnx_path, X_scaled, batch_size=bs, device="cpu")
         results.append(r)
         print(f"  ONNX CPU:    {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
-        
+
         # ONNX CoreML / Apple Neural Engine
         if has_coreml:
             try:
@@ -260,39 +258,40 @@ def run_benchmark_suite(
                 print(f"  ONNX CoreML: {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
             except Exception as e:
                 print(f"  ONNX CoreML: ошибка - {e}")
-        
+
         # ONNX INT8 (если есть)
         if has_quant:
             r = benchmark_onnx(onnx_quant_path, X_scaled, batch_size=bs, device="cpu")
             results.append(r)
             print(f"  ONNX INT8:   {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
-        
+
         # PyTorch MPS (Apple GPU)
-        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             try:
                 r = benchmark_pytorch(pytorch_dir, X_scaled, batch_size=bs, device="mps")
                 results.append(r)
                 print(f"  PyTorch MPS: {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
             except Exception as e:
                 print(f"  PyTorch MPS: ошибка - {e}")
-        
+
         # CUDA GPU (если доступен)
         if torch.cuda.is_available():
             r = benchmark_pytorch(pytorch_dir, X_scaled, batch_size=bs, device="cuda")
             results.append(r)
             print(f"  PyTorch GPU: {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
-        
+
         if "CUDAExecutionProvider" in ort.get_available_providers():
             r = benchmark_onnx(onnx_path, X_scaled, batch_size=bs, device="gpu")
             results.append(r)
             print(f"  ONNX GPU:    {r.avg_latency_ms:.3f}ms, {r.throughput_rps:.0f} rps")
-    
+
     df = pd.DataFrame([vars(r) for r in results])
     return df
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch-dir", default="models/pytorch")
     parser.add_argument("--onnx", default="models/onnx/model.onnx")
@@ -301,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--scaler", default="models/pytorch/scaler.pkl")
     parser.add_argument("--output", default="reports/benchmark.csv")
     args = parser.parse_args()
-    
+
     df = run_benchmark_suite(
         args.pytorch_dir,
         args.onnx,
@@ -309,7 +308,7 @@ if __name__ == "__main__":
         args.test_data,
         args.scaler,
     )
-    
+
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(args.output, index=False)
     print(f"\nСохранено в {args.output}")

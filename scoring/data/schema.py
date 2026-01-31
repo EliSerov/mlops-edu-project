@@ -2,8 +2,9 @@
 Pandera схема для датасета кредитных карт.
 Основано на структуре UCI Credit Card dataset.
 """
+
 import pandera as pa
-from pandera import Column, Check
+from pandera import Check, Column
 
 # PAY_* колонки: -2=нет потребления, -1=оплачено полностью, 0=револьверный, 1+=месяцев просрочки
 PAY_RANGE = (-2, 9)
