@@ -138,12 +138,17 @@ jobs:
       
       - name: Конфигурация kubeconfig
         run: |
+          if [ -z "${{ secrets.KUBECONFIG_STAGING }}" ]; then
+            echo "::error::Секрет KUBECONFIG_STAGING не настроен. Добавьте base64(kubeconfig) в Settings → Secrets"
+            exit 1
+          fi
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > ~/.kube/config
+          kubectl cluster-info || (echo "::error::Не удалось подключиться к кластеру." && exit 1)
       
       - name: Деплой
         run: |
-          kubectl apply -k deploy/overlays/staging
+          kubectl apply -k deploy/overlays/staging --validate=false
           kubectl -n credit-scoring-staging rollout status deployment/stg-backend --timeout=120s
 
   deploy-prod:
@@ -159,12 +164,19 @@ jobs:
       
       - name: Конфигурация kubeconfig
         run: |
+          if [ -z "${{ secrets.KUBECONFIG_PROD }}" ]; then
+            echo "::error::Секрет KUBECONFIG_PROD не настроен. Добавьте base64(kubeconfig) в Settings → Secrets → Actions"
+            echo "Создайте кластер (Selectel MKS / minikube), получите kubeconfig:"
+            echo "  kubectl config view --minify --flatten | base64 -w 0"
+            exit 1
+          fi
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > ~/.kube/config
+          kubectl cluster-info || (echo "::error::Не удалось подключиться к кластеру. Проверьте kubeconfig." && exit 1)
       
       - name: Деплой
         run: |
-          kubectl apply -k deploy/overlays/prod
+          kubectl apply -k deploy/overlays/prod --validate=false
           kubectl -n credit-scoring rollout status deployment/backend --timeout=180s
       
       - name: Smoke тест

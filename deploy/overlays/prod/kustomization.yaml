@@ -6,8 +6,10 @@ namespace: credit-scoring
 resources:
   - ../../base
 
-commonLabels:
-  env: production
+labels:
+  - includeSelectors: true
+    pairs:
+      env: production
 
 patches:
   - patch: |-

@@ -8,8 +8,10 @@ resources:
 
 namePrefix: stg-
 
-commonLabels:
-  env: staging
+labels:
+  - includeSelectors: true
+    pairs:
+      env: staging
 
 patches:
   - patch: |-
