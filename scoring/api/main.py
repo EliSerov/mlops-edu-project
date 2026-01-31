@@ -3,17 +3,17 @@ FastAPI сервис для кредитного скоринга.
 Использует ONNX runtime для продакшен инференса.
 """
 import os
+import pickle
 import time
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-import pickle
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 # метрики
 REQUEST_COUNT = Counter(

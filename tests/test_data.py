@@ -1,9 +1,9 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
-from scoring.data.schema import validate, credit_schema
-from scoring.data.prepare import add_features, FEATURE_COLS
+from scoring.data.prepare import FEATURE_COLS, add_features
+from scoring.data.schema import credit_schema, validate
 
 
 @pytest.fixture

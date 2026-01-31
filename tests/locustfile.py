@@ -2,8 +2,9 @@
 Нагрузочное тестирование с Locust.
 Запуск: locust -f tests/locustfile.py --host http://localhost:8000
 """
-from locust import HttpUser, task, between
 import random
+
+from locust import HttpUser, between, task
 
 
 class ScoringUser(HttpUser):

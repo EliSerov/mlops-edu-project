@@ -3,7 +3,9 @@
 PyTorch реализация — проще экспорт в ONNX чем sklearn.
 """
 from __future__ import annotations
+
 from typing import List, Optional
+
 import torch
 import torch.nn as nn
 

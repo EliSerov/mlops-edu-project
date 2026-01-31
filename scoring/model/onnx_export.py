@@ -2,14 +2,16 @@
 Утилиты экспорта в ONNX для PD модели.
 """
 from __future__ import annotations
-from typing import Union
-import torch
-import onnx
-import onnxruntime as ort
-import numpy as np
-from pathlib import Path
+
 import json
 import pickle
+from pathlib import Path
+from typing import Union
+
+import numpy as np
+import onnx
+import onnxruntime as ort
+import torch
 
 from .network import create_model
 

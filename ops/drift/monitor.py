@@ -2,20 +2,16 @@
 Мониторинг дрифта данных с использованием Evidently.
 Запускается как CronJob или триггерится из Airflow.
 """
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from datetime import datetime
 import json
+from datetime import datetime
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from evidently import ColumnMapping
-from evidently.report import Report
-from evidently.metrics import (
-    DataDriftTable,
-    DatasetDriftMetric,
-    ColumnDriftMetric,
-)
 from evidently.metric_preset import DataDriftPreset
+from evidently.metrics import ColumnDriftMetric, DataDriftTable, DatasetDriftMetric
+from evidently.report import Report
 
 
 TARGET = "default.payment.next.month"

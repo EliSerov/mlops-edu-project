@@ -2,10 +2,11 @@
 Квантизация ONNX — INT8 динамическая квантизация.
 Уменьшает размер модели и может ускорить инференс на CPU.
 """
-import onnx
-from onnxruntime.quantization import quantize_dynamic, QuantType
-from pathlib import Path
 import os
+from pathlib import Path
+
+import onnx
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
 def quantize_model(input_path: str | Path, output_path: str | Path = None) -> Path:

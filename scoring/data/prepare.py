@@ -2,10 +2,12 @@
 Подготовка данных: загрузка CSV, валидация, генерация фичей, разбиение.
 """
 from __future__ import annotations
-import pandas as pd
-import numpy as np
+
 from pathlib import Path
 from typing import Union
+
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from .schema import validate

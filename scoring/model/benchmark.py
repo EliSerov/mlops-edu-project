@@ -1,15 +1,16 @@
 """
 Бенчмарк производительности инференса для разных форматов моделей и устройств.
 """
-import time
-import numpy as np
-import pandas as pd
-import onnxruntime as ort
-import torch
-from pathlib import Path
-import pickle
 import json
+import pickle
+import time
 from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import onnxruntime as ort
+import pandas as pd
+import torch
 
 
 @dataclass
