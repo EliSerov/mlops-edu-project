@@ -9,11 +9,11 @@ build/
 venv/
 
 # ml artifacts
-*.pt
-*.onnx
-*.pkl
-mlruns/
-models/
+# *.pt
+# *.onnx
+# *.pkl
+# mlruns/
+# models/
 
 # data (managed by dvc)
 data/processed/
