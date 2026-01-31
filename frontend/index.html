@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Scoring</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; background: #f5f5f5; min-height: 100vh; }
+        .container { max-width: 600px; margin: 2rem auto; padding: 1rem; }
+        h1 { margin-bottom: 1.5rem; color: #333; }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: #555; }
+        input, select { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; }
+        button { background: #2563eb; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 1rem; margin-top: 1rem; }
+        button:hover { background: #1d4ed8; }
+        .result { margin-top: 1.5rem; padding: 1rem; border-radius: 4px; }
+        .result.default { background: #fee2e2; border: 1px solid #fca5a5; }
+        .result.no-default { background: #dcfce7; border: 1px solid #86efac; }
+        .result h3 { margin-bottom: 0.5rem; }
+        .prob { font-size: 2rem; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Credit Default Prediction</h1>
+        <div class="card">
+            <form id="scoreForm">
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Credit Limit</label>
+                        <input type="number" name="LIMIT_BAL" value="50000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Age</label>
+                        <input type="number" name="AGE" value="30" min="18" max="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Sex</label>
+                        <select name="SEX"><option value="1">Male</option><option value="2">Female</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Education</label>
+                        <select name="EDUCATION">
+                            <option value="1">Graduate</option>
+                            <option value="2">University</option>
+                            <option value="3">High school</option>
+                            <option value="4">Others</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Marriage</label>
+                        <select name="MARRIAGE">
+                            <option value="1">Married</option>
+                            <option value="2">Single</option>
+                            <option value="3">Others</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Status (PAY_0)</label>
+                        <input type="number" name="PAY_0" value="0" min="-2" max="8">
+                    </div>
+                </div>
+                <button type="submit">Get Prediction</button>
+            </form>
+            <div id="result"></div>
+        </div>
+    </div>
+    <script>
+        const API = '/api';
+        document.getElementById('scoreForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            // fill defaults for missing fields
+            const data = {
+                LIMIT_BAL: +fd.get('LIMIT_BAL'),
+                SEX: +fd.get('SEX'),
+                EDUCATION: +fd.get('EDUCATION'),
+                MARRIAGE: +fd.get('MARRIAGE'),
+                AGE: +fd.get('AGE'),
+                PAY_0: +fd.get('PAY_0'),
+                PAY_2: 0, PAY_3: 0, PAY_4: 0, PAY_5: 0, PAY_6: 0,
+                BILL_AMT1: 10000, BILL_AMT2: 10000, BILL_AMT3: 10000, 
+                BILL_AMT4: 10000, BILL_AMT5: 10000, BILL_AMT6: 10000,
+                PAY_AMT1: 1000, PAY_AMT2: 1000, PAY_AMT3: 1000,
+                PAY_AMT4: 1000, PAY_AMT5: 1000, PAY_AMT6: 1000,
+            };
+            try {
+                const res = await fetch(`${API}/predict`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                const json = await res.json();
+                const isDefault = json.prediction === 1;
+                document.getElementById('result').innerHTML = `
+                    <div class="result ${isDefault ? 'default' : 'no-default'}">
+                        <h3>${isDefault ? 'High Default Risk' : 'Low Default Risk'}</h3>
+                        <div class="prob">${(json.probability * 100).toFixed(1)}%</div>
+                        <p>probability of default</p>
+                    </div>
+                `;
+            } catch (err) {
+                document.getElementById('result').innerHTML = `<div class="result default">Error: ${err}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>

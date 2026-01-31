@@ -20,7 +20,7 @@ data/processed/
 # data/raw/*.csv
 !data/raw/.gitkeep
 
-*.html
+# *.html
 
 # ide
 .idea/
