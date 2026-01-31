@@ -17,7 +17,7 @@ models/
 
 # data (managed by dvc)
 data/processed/
-data/raw/*.csv
+# data/raw/*.csv
 !data/raw/.gitkeep
 
 *.html
