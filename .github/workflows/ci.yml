@@ -87,7 +87,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=sha,prefix=
+            type=sha,prefix=,format=long
       
       - name: Сборка backend
         uses: docker/build-push-action@v5
