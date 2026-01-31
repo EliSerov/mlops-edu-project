@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-01-31T03:36:02.448417",
+  "reference_size": 24000,
+  "current_size": 6000,
+  "dataset_drift": false,
+  "drift_share": 0.0,
+  "drifted_columns": []
+}

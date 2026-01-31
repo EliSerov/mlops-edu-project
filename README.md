@@ -1,169 +1,274 @@
-# Credit Scoring Service
+# Credit Scoring MLOps
 
-Сервис для расчёта PD (probability of default) по заявкам на кредитные карты.
+Промышленный деплой модели кредитного скоринга с полным MLOps циклом.
+
+## Стек технологий
+
+| Этап | Технологии |
+|------|------------|
+| **1. Модель** | PyTorch, ONNX, INT8 quantization |
+| **2. Инфраструктура** | Terraform, Selectel MKS (Kubernetes) |
+| **3. Контейнеризация** | Docker (multi-stage), Kustomize |
+| **4. CI/CD** | GitHub Actions, Trivy |
+| **5. Мониторинг** | Prometheus, Grafana, Loki |
+| **6. Drift** | Evidently AI |
+| **7. Retraining** | Apache Airflow |
+
+---
 
 ## Быстрый старт
 
 ```bash
-# установка
-python -m venv .venv && source .venv/bin/activate
+# клонирование
+git clone https://github.com/EliSerov/mlops-edu-project.git
+cd mlops-edu-project
+
+# виртуальное окружение
+python3.10 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# подготовка данных
-python -m scoring.data.prepare data/raw/UCI_Credit_Card.csv data/processed
-
-# обучение
-python -m scoring.model.train --train data/processed/train.csv --test data/processed/test.csv --output models/pytorch
-
-# экспорт в onnx
-python -m scoring.model.onnx_export --model-dir models/pytorch --output models/onnx/model.onnx --validate
-
-# квантизация
-python -m scoring.model.quantize --input models/onnx/model.onnx
-
-# запуск api
-uvicorn scoring.api.main:app --reload
 ```
 
-## Структура проекта
+---
 
-```
-scoring/           код модели и api
-  data/            схема данных, препроцессинг
-  model/           сеть, обучение, onnx экспорт, бенчмарки
-  api/             fastapi сервис
-infra/             terraform (selectel)
-deploy/            k8s манифесты (kustomize)
-  base/            базовые ресурсы
-  overlays/        конфиги staging/prod
-  monitoring/      helm values для prometheus/loki
-ops/               операционные скрипты
-  drift/           мониторинг дрифта (evidently)
-  airflow/         dag переобучения
-```
+## Проверка работы
 
-## DVC Pipeline
+### 1. Обучение модели
 
 ```bash
-dvc repro           # запуск пайплайна
-dvc dag             # граф зависимостей
+python -m scoring.model.train \
+  --train data/processed/train.csv \
+  --test data/processed/test.csv \
+  --output models/pytorch
 ```
 
-Стадии: prepare → train → export_onnx → quantize → benchmark
+Результат:
+```
+Epoch 10/50, Loss: 0.4521
+Epoch 20/50, Loss: 0.4312
+...
+Metrics: {'roc_auc': 0.7706, 'precision': 0.67, 'recall': 0.35, 'f1': 0.46}
+```
 
-## Docker
+### 2. ONNX экспорт и валидация
 
 ```bash
-docker compose up -d                    # backend + frontend
-docker compose --profile dev up -d      # + mlflow
+python -m scoring.model.onnx_export \
+  --model-dir models/pytorch \
+  --output models/onnx/model.onnx \
+  --validate
 ```
 
-## Инфраструктура
+Результат:
+```
+Экспортировано в models/onnx/model.onnx
+Валидация: max_diff=7.45e-08, passed=True
+```
 
-Terraform для Selectel MKS (managed kubernetes).
+### 3. INT8 квантизация
 
 ```bash
-cd infra
-terraform init -backend-config=backend.hcl
-terraform plan -var-file=envs/staging.tfvars
-terraform apply -var-file=envs/staging.tfvars
+python -m scoring.model.quantize \
+  --input models/onnx/model.onnx \
+  --output models/onnx/model_int8.onnx \
+  --compare
 ```
 
-Модули:
-- `vpc` — проект, сеть, security groups
-- `k8s` — managed кластер, node groups
-- `storage` — s3 бакет для dvc/моделей
-- `monitoring` — плейсхолдер (стек ставится через helm)
+Результат:
+```
+Оригинал: 16.6 KB
+Квантизованная: 8.3 KB
+Сжатие: 2.01x
+ROC-AUC оригинал: 0.7706
+ROC-AUC квантизованная: 0.7706
+Разница: 0.000010
+```
 
-## Деплой
-
-Через kustomize overlays:
+### 4. Бенчмарк производительности
 
 ```bash
-kubectl apply -k deploy/overlays/staging
-kubectl apply -k deploy/overlays/prod
+python -m scoring.model.benchmark \
+  --pytorch-dir models/pytorch \
+  --onnx models/onnx/model.onnx \
+  --onnx-quant models/onnx/model_int8.onnx \
+  --test-data data/processed/test.csv \
+  --scaler models/pytorch/scaler.pkl
 ```
 
-## Мониторинг
+Результат (Apple Silicon M-series):
+```
+Batch size: 1
+  PyTorch CPU: 0.012ms, 86263 rps
+  ONNX CPU:    0.006ms, 163901 rps
+  ONNX INT8:   0.004ms, 234396 rps
+  ONNX CoreML: 0.015ms, 64714 rps
+  PyTorch MPS: 0.266ms, 3753 rps
+```
 
-Prometheus + Grafana + Loki через helm:
+Подробные результаты: [reports/README.md](reports/README.md)
+
+### 5. Запуск API
 
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install prometheus prometheus-community/kube-prometheus-stack -f deploy/monitoring/prometheus-values.yaml
-
-helm repo add grafana https://grafana.github.io/helm-charts
-helm install loki grafana/loki-stack -f deploy/monitoring/loki-values.yaml
+uvicorn scoring.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Алерты в `deploy/monitoring/alerts.yaml`.
-Runbook: `ops/runbook.md`.
-
-## Мониторинг дрифта
-
-Evidently запускается как CronJob ежедневно.
-Ручной запуск:
+#### Health check
 
 ```bash
-python -m ops.drift.monitor --reference data/processed/train.csv --current data/processed/test.csv
+curl http://localhost:8000/health
 ```
 
-## Переобучение
-
-Airflow DAG в `ops/airflow/dags/retrain.py`:
-- Запускается еженедельно или при обнаружении дрифта
-- Валидирует новую модель против продакшена
-- Автоматически промоутит если валидация пройдена
-
-Локальный airflow:
-```bash
-cd ops/airflow && docker compose up -d
-# UI на localhost:8080, admin/admin
+```json
+{"status": "ok", "model_loaded": true}
 ```
 
-## Модель
-
-- Архитектура: 3-слойный MLP (64→32→1)
-- Вход: 29 фичей (23 исходных + 6 сгенерированных)
-- Выход: P(default)
-- Формат: ONNX с INT8 квантизацией
-
-Бенчмарк на M1 Mac:
-| Формат | Batch=1 | Batch=64 |
-|--------|---------|----------|
-| PyTorch | ~0.5ms | ~2ms |
-| ONNX FP32 | ~0.3ms | ~1.5ms |
-| ONNX INT8 | ~0.2ms | ~1.2ms |
-
-## API
+#### Предсказание (хороший клиент)
 
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"LIMIT_BAL": 50000, "SEX": 1, "EDUCATION": 2, ...}'
-
-# ответ: {"probability": 0.23, "prediction": 0}
+  -d '{
+    "LIMIT_BAL": 50000, "SEX": 1, "EDUCATION": 2, "MARRIAGE": 1, "AGE": 35,
+    "PAY_0": 0, "PAY_2": 0, "PAY_3": 0, "PAY_4": 0, "PAY_5": 0, "PAY_6": 0,
+    "BILL_AMT1": 10000, "BILL_AMT2": 9000, "BILL_AMT3": 8000,
+    "BILL_AMT4": 7000, "BILL_AMT5": 6000, "BILL_AMT6": 5000,
+    "PAY_AMT1": 1000, "PAY_AMT2": 1000, "PAY_AMT3": 1000,
+    "PAY_AMT4": 1000, "PAY_AMT5": 1000, "PAY_AMT6": 1000
+  }'
 ```
 
-Эндпоинты:
-- `POST /predict` — получить вероятность дефолта
-- `GET /health` — проверка здоровья
-- `GET /metrics` — метрики prometheus
+```json
+{"probability": 0.197, "prediction": 0, "model_version": "v1"}
+```
 
-## CI/CD
+#### Предсказание (рисковый клиент)
 
-GitHub Actions (`.github/workflows/ci.yml`):
-1. lint + тесты
-2. валидация схемы данных
-3. сборка docker образов
-4. security scan (trivy)
-5. деплой в staging (develop branch)
-6. деплой в prod (main branch)
-7. автоматический rollback при ошибке
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "LIMIT_BAL": 10000, "SEX": 2, "EDUCATION": 3, "MARRIAGE": 2, "AGE": 25,
+    "PAY_0": 2, "PAY_2": 2, "PAY_3": 3, "PAY_4": 3, "PAY_5": 4, "PAY_6": 4,
+    "BILL_AMT1": 9000, "BILL_AMT2": 9500, "BILL_AMT3": 10000,
+    "BILL_AMT4": 10500, "BILL_AMT5": 11000, "BILL_AMT6": 11500,
+    "PAY_AMT1": 0, "PAY_AMT2": 0, "PAY_AMT3": 100,
+    "PAY_AMT4": 0, "PAY_AMT5": 0, "PAY_AMT6": 0
+  }'
+```
 
-## Заметки
+```json
+{"probability": 0.611, "prediction": 1, "model_version": "v1"}
+```
 
-- GPU node group отключена по умолчанию (дорого)
-- В проде используется INT8 модель, FP32 как fallback
-- Порог дрифта: 30% фичей задрифтовало → триггер переобучения
-- Валидация модели: отклонить если AUC упал >2% vs продакшен
+#### Prometheus метрики
+
+```bash
+curl http://localhost:8000/metrics | grep prediction
+```
+
+```
+prediction_requests_total{status="success"} 2.0
+prediction_latency_seconds_bucket{le="0.01"} 2.0
+```
+
+### 6. Unit тесты
+
+```bash
+pytest tests/ -v
+```
+
+```
+tests/test_api.py::test_health PASSED
+tests/test_data.py::test_schema_valid PASSED
+tests/test_data.py::test_schema_invalid_age PASSED
+tests/test_data.py::test_add_features PASSED
+tests/test_data.py::test_feature_cols_exist PASSED
+=================== 5 passed, 1 skipped ===================
+```
+
+### 7. Drift мониторинг
+
+```bash
+python -m ops.drift.monitor \
+  --reference data/processed/train.csv \
+  --current data/processed/test.csv \
+  --output reports/drift
+```
+
+```
+Отчёт сохранён: reports/drift/drift_report_20260131_033602.html
+Обнаружен дрифт датасета: False
+Доля дрифта: 0.0%
+```
+
+HTML отчёт Evidently: `reports/drift/drift_report_*.html`
+
+### 8. Docker
+
+```bash
+# backend
+docker build -t credit-scoring/backend .
+
+# frontend
+docker build -t credit-scoring/frontend ./frontend
+
+# или через compose
+docker-compose up -d
+```
+
+---
+
+## Структура проекта
+
+```
+├── scoring/                 # ML код
+│   ├── api/                 # FastAPI сервис
+│   ├── data/                # Подготовка данных, схема
+│   └── model/               # Сеть, обучение, ONNX, бенчмарки
+├── infra/                   # Terraform (Selectel MKS)
+│   └── modules/             # VPC, K8s, Storage, Monitoring
+├── deploy/                  # Kubernetes манифесты
+│   ├── base/                # Kustomize base
+│   ├── overlays/            # staging, prod
+│   └── monitoring/          # Prometheus, Loki, alerts
+├── ops/                     # Операции
+│   ├── airflow/             # DAG переобучения
+│   └── drift/               # Evidently мониторинг
+├── tests/                   # Unit тесты, нагрузочные
+├── reports/                 # Бенчмарки, drift отчёты
+└── .github/workflows/       # CI/CD
+```
+
+---
+
+## CI/CD Pipeline
+
+GitHub Actions: `.github/workflows/ci.yml`
+
+```
+lint-test → validate-data → build → security-scan → deploy
+                                                      ↓
+                                              (rollback on fail)
+```
+
+- **lint-test**: ruff, black, pytest
+- **build**: Docker multi-stage, push to ghcr.io
+- **security-scan**: Trivy (CRITICAL, HIGH)
+- **deploy**: Kustomize → Kubernetes
+
+---
+
+## Выводы по бенчмаркам
+
+Для модели размером 16KB:
+
+| Backend | Latency | Рекомендация |
+|---------|---------|--------------|
+| **ONNX INT8** | 0.004ms | Latency-critical API |
+| ONNX FP32 | 0.006ms | Batch processing |
+| PyTorch CPU | 0.012ms | Разработка |
+| CoreML (NPU) | 0.015ms | Слишком маленькая модель |
+| MPS (GPU) | 0.266ms | Оверхед передачи данных |
+
+GPU/NPU не даёт выигрыша для маленьких моделей из-за оверхеда.
